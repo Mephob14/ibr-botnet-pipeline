@@ -10,62 +10,87 @@ The pipeline consists of four scripts, which must be run in sequence. Each scrip
 
 ## 🧩 Script 1: `pcap_filter_and_geoenrich_MAIN.py`
 
-**Purpose**:  
-Filters raw PCAP traffic and enriches source IPs with geolocation and ASN metadata.
+This script scans through folders with PCAP files and does a few steps to find relevant traffic and add extra data:
 
-**Steps performed**:
-- Filters TCP traffic for ports 22, 23, 80, and 443.
-- Extracts payloads using `tshark`.
-- Decodes TCP payloads from hex to readable form.
-- Enriches source IPs with country, city, latitude, longitude, and ASN using GeoLite2 databases.
+\begin{enumerate}
+    \item Filters for TCP traffic on ports 22, 23, 80, and 443, which are often used in botnet traffic.
+    \item Pulls out the payloads from this filtered traffic.
+    \item Decodes the payloads and looks up GeoIP details (like country, ASN, and coordinates) for each source IP.
+    \item It saves out filtered PCAPs, extracted payloads, and enriched CSVs.
+\end{enumerate}
 
-**Requirements**:
-- `tshark`
-- `geoip2`
-- MaxMind GeoLite2 City and ASN `.mmdb` databases.
+\textbf{Dependencies:}
+\begin{itemize}
+    \item `tshark` – to filter and extract from the PCAPs.
+    \item Python's `geoip2` – to look up IP info using the GeoLite2 database.
+\end{itemize}
+
+The script skips any files it's already processed and expects one PCAP per folder.
 
 ---
 
 ## 🧩 Script 2: `process_enriched_data_extract_c2_and_payloads_MAIN.py`
 
-**Purpose**:  
-Parses decoded payloads to extract C2 servers and malware filenames using regex.
+This script takes the enriched payload files and finds command-and-control (C2) IPs and filenames for downloaded payloads:
 
-**Steps performed**:
-- Identifies C2 URLs from payload strings.
-- Extracts payload filenames and filters by known extensions.
-- Creates global output files:
-  - `unique_c2_servers.csv` with geographic data.
-  - `payload_counts.csv` with frequency of filenames.
-  - GeoJSON map of all observed C2 locations.
+\begin{enumerate}
+    \item Loads enriched CSVs from each region folder.
+    \item Uses regular expressions to pull out C2 IPs and filenames from payload data.
+    \item Removes any rows that didn’t contain valid C2 or payload entries.
+    \item Puts together lists of all seen C2s and payloads and saves the results in CSV and GeoJSON formats.
+\end{enumerate}
 
----
+\textbf{Dependencies:}
+\begin{itemize}
+    \item `os` – to move through folders and find files.
+    \item `pandas` – for processing large CSVs in chunks.
+    \item `re` – to match C2 and filename patterns.
+    \item `json` – to save map files in GeoJSON.
+\end{itemize}
+
+Outputs include filtered files per region, a full list of C2s with metadata, and a map of server locations.
 
 ## 🧩 Script 3: `enrich_unique_ipinfo_MAIN.py`
 
-**Purpose**:  
-Enriches each unique C2 IP address using IPinfo’s public API.
+This script enriches the list of unique command-and-control (C2) server IPs using the IPinfo API. It collects additional metadata like ASN, geolocation, hosting provider, and whether the IP belongs to a VPN or hosting service. The enriched data helps improve botnet infrastructure mapping and supports geospatial analysis.
 
-**Steps performed**:
-- Queries ASN, geolocation, and hosting data.
-- Outputs enriched CSV with extra metadata (e.g., organization, type, abuse contacts).
+\begin{itemize}
+    \item Input: CSV file with unique IP addresses.
+    \item Output: CSV file with enriched metadata.
+    \item Handles failed lookups gracefully and retries on timeout.
+\end{itemize}
 
-**Requirements**:
-- Free IPinfo API key.
-- Creates `enriched_c2_servers.csv`.
-
+\textbf{Dependencies:}
+\begin{itemize}
+    \item `pandas` – for reading and writing CSV data.
+    \item `requests` – for making API calls to IPinfo.
+    \item 'API key' - api key for making calls to IPinfo
+\end{itemize}
 ---
 
 ## 🧩 Script 4: `visualize_c2_aws_connections_MAIN.py`
 
-**Purpose**:  
-Generates visual outputs to map botnet targeting behavior against AWS regions.
+This script reads C2 server data for each AWS region and creates GeoJSON files to show connections between botnet infrastructure and cloud sensors. It works by:
 
-**Steps performed**:
-- Loads AWS sensor regions and enriched C2 data.
-- Builds a matrix of connections between sensors and observed botnet infrastructure.
-- Saves interactive or static graphs for use in reporting.
+\begin{enumerate}
+    \item Going through folders with filtered payload data.
+    \item Picking out the C2 server IPs and their coordinates.
+    \item Linking each C2 to the AWS region that captured its traffic.
+    \item Saving everything as GeoJSON so it can be shown in tools like QGIS.
+\end{enumerate}
 
+\textbf{Dependencies:}
+\begin{itemize}
+    \item `pandas` – for working with CSV files.
+    \item `json` – to write GeoJSON.
+    \item `os` – for going through folders.
+\end{itemize}
+
+The script gives two output files:
+\begin{itemize}
+    \item \texttt{aws-nodes.geojson} – location points for AWS regions.
+    \item \texttt{c2-to-aws-connections.geojson} – connection lines from C2 servers to AWS regions.
+\end{itemize}
 ---
 
 ## 📁 Directory Structure (Example)
